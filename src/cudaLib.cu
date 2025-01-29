@@ -13,6 +13,11 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 __global__ 
 void saxpy_gpu (float* x, float* y, float scale, int size) {
 	//	Insert GPU SAXPY kernel code here
+	int i = threadIdx.x + blockDim.x * blockIdx.x;
+	if (i < size)
+	{
+		y[i] = scale * x[i] + y[i];
+	}
 }
 
 int runGpuSaxpy(int vectorSize) {
@@ -22,6 +27,37 @@ int runGpuSaxpy(int vectorSize) {
 	//	Insert code here
 	std::cout << "Lazy, you are!\n";
 	std::cout << "Write code, you must\n";
+
+	int size = vectorSize * sizeof(float);
+	float *X_d, *Y_d, *Z_d;
+	float *X, *Y, *Z;
+
+	cudaMalloc((void**) &X_d, size);
+	cudaMalloc((void**) &Y_d, size);
+	cudaMalloc((void**) &Z_d, size);
+	X = (float *) malloc(size);
+	Y = (float *) malloc(size);
+	Z = (float *) malloc(size);
+
+	// init X and Y
+	vectorInit(X, vectorSize);
+	vectorInit(Y, vectorSize);
+
+	cudaMemcpy(X_d, X, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(Y_d, Y, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(Z_d, Y, size, cudaMemcpyHostToDevice);
+
+	float scale = rand() % 99999;
+	saxpy_gpu<<<ceil(vectorSize/256.0), 256>>>(X_d, Z_d, scale, vectorSize);
+
+	cudaMemcpy(Z, Z_d, size, cudaMemcpyDeviceToHost);
+
+	cudaFree(X_d);
+	cudaFree(Y_d);
+	cudaFree(Z_d);
+
+	// verify
+	printf("Error count: %i\n", verifyVector(X, Y, Z, scale, vectorSize));
 
 	return 0;
 }
