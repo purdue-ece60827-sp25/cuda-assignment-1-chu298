@@ -1,5 +1,6 @@
 
 #include "cudaLib.cuh"
+#include "curand_kernel.h"
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 {
@@ -77,11 +78,37 @@ int runGpuSaxpy(int vectorSize) {
 __global__
 void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 	//	Insert code here
+	int id = threadIdx.x + blockDim.x * blockIdx.x;
+
+	// Setup RNG
+	curandState_t rng;
+	curand_init(clock64(), id, 0, &rng);
+
+	if (id < pSumSize)
+	{
+		for (uint64_t i = 0; i < sampleSize; i++)
+		{
+			float randX = curand_uniform(&rng);
+			float randY = curand_uniform(&rng);
+
+			if ( int(randX * randX + randY * randY) == 0 ) {
+				pSums[id]++;
+			}
+		}
+	}
 }
 
 __global__ 
 void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize) {
 	//	Insert code here
+	int id = threadIdx.x + blockDim.x * blockIdx.x;
+	if (id < reduceSize)
+	{
+		for (uint64_t i = 0; i < pSumSize/reduceSize; i++)
+		{
+			totals[id] += pSums[id + i];
+		}
+	}
 }
 
 int runGpuMCPi (uint64_t generateThreadCount, uint64_t sampleSize, 
@@ -100,6 +127,7 @@ int runGpuMCPi (uint64_t generateThreadCount, uint64_t sampleSize,
 	float approxPi = estimatePi(generateThreadCount, sampleSize, 
 		reduceThreadCount, reduceSize);
 	
+	std::cout << std::setprecision(10);
 	std::cout << "Estimated Pi = " << approxPi << "\n";
 
 	auto tEnd= std::chrono::high_resolution_clock::now();
@@ -118,5 +146,62 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	//      Insert code here
 	std::cout << "Sneaky, you are ...\n";
 	std::cout << "Compute pi, you must!\n";
+
+	generateThreadCount = 4096;
+	sampleSize = 1000000000;
+	reduceThreadCount = 64;
+	reduceSize = 64;
+
+	printf("Num Threads: %llu, Sample Size: %llu\n", generateThreadCount, sampleSize);
+	printf("Num Reduced Threads: %llu, Reduce Size: %llu\n", reduceThreadCount, reduceSize);
+
+	// Initialize stuff
+	uint64_t *partialSums_d;
+	uint64_t *partialSums;
+	int size = generateThreadCount * sizeof(uint64_t);
+	double totalSum = 0;
+	bool reduce = true;
+
+	cudaMalloc((void**) &partialSums_d, size);
+	partialSums = (uint64_t *) malloc(size);
+	// cudaMemcpy(partialSums_d, partialSums, size, cudaMemcpyHostToDevice);
+
+	// call the kernel
+	generatePoints<<<ceil(generateThreadCount/256.0), 256>>>(partialSums_d, generateThreadCount, sampleSize);
+
+	if (reduce)
+	{
+		uint64_t *partialTotals_d;
+		uint64_t *partialTotals;
+		int sizeTotals = reduceThreadCount * sizeof(uint64_t);
+		cudaMalloc((void**) &partialTotals_d, sizeTotals);
+		partialTotals = (uint64_t *) malloc(sizeTotals);
+		// cudaMemcpy(partialSums_d, partialSums, size, cudaMemcpyHostToDevice);
+		reduceCounts<<<ceil(reduceThreadCount/256.0), 256>>>(partialSums_d, partialTotals_d, generateThreadCount, reduceSize);
+		cudaMemcpy(partialTotals, partialTotals_d, sizeTotals, cudaMemcpyDeviceToHost);
+		for (uint64_t i = 0; i < reduceThreadCount; i++)
+		{
+			totalSum += partialTotals[i];
+			// printf("partialTotals[%i] = %llu\n", i, partialTotals[i]);
+		}
+	}
+	else
+	{
+		cudaMemcpy(partialSums, partialSums_d, size, cudaMemcpyDeviceToHost);
+
+		// calculate total sum
+		for (uint64_t i = 0; i < generateThreadCount; i++)
+		{
+			totalSum += partialSums[i];
+			// printf("partialSums[%i] = %llu\n", i, partialSums[i]);
+		}
+	}
+
+	// totalSum/(size * # threads) should get us pi/4
+	approxPi = ((double)totalSum)/(sampleSize * generateThreadCount);
+	approxPi = approxPi * 4.0f;
+
+	cudaFree(partialSums_d);
+
 	return approxPi;
 }
