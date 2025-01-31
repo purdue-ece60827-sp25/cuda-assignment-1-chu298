@@ -104,7 +104,8 @@ void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint6
 	int id = threadIdx.x + blockDim.x * blockIdx.x;
 	if (id < reduceSize)
 	{
-		for (uint64_t i = 0; i < pSumSize/reduceSize; i++)
+		uint64_t numToReduce = pSumSize/reduceSize;
+		for (uint64_t i = 0; i < numToReduce; i++)
 		{
 			totals[id] += pSums[id + i];
 		}
@@ -177,7 +178,7 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 		cudaMalloc((void**) &partialTotals_d, sizeTotals);
 		partialTotals = (uint64_t *) malloc(sizeTotals);
 		// cudaMemcpy(partialSums_d, partialSums, size, cudaMemcpyHostToDevice);
-		reduceCounts<<<ceil(reduceThreadCount/256.0), 256>>>(partialSums_d, partialTotals_d, generateThreadCount, reduceSize);
+		reduceCounts<<<ceil(reduceThreadCount/32.0), 32>>>(partialSums_d, partialTotals_d, generateThreadCount, reduceThreadCount);
 		cudaMemcpy(partialTotals, partialTotals_d, sizeTotals, cudaMemcpyDeviceToHost);
 		for (uint64_t i = 0; i < reduceThreadCount; i++)
 		{
