@@ -28,6 +28,8 @@ int runGpuSaxpy(int vectorSize) {
 	//	Insert code here
 	std::cout << "Lazy, you are!\n";
 	std::cout << "Write code, you must\n";
+	// vectorSize = 524288;
+	printf("VectorSize: %i\n", vectorSize);
 
 	int size = vectorSize * sizeof(float);
 	float *X_d, *Y_d, *Z_d;
@@ -56,6 +58,9 @@ int runGpuSaxpy(int vectorSize) {
 	cudaFree(X_d);
 	cudaFree(Y_d);
 	cudaFree(Z_d);
+	free(X);
+	free(Y);
+	free(Z);
 
 	// verify
 	printf("Error count: %i\n", verifyVector(X, Y, Z, scale, vectorSize));
@@ -148,10 +153,10 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	std::cout << "Sneaky, you are ...\n";
 	std::cout << "Compute pi, you must!\n";
 
-	generateThreadCount = 4096;
-	sampleSize = 1000000000;
-	reduceThreadCount = 64;
-	reduceSize = 64;
+	// generateThreadCount = 16384;
+	// sampleSize = 16000000;
+	// reduceThreadCount = 64;
+	// reduceSize = 64;
 
 	printf("Num Threads: %llu, Sample Size: %llu\n", generateThreadCount, sampleSize);
 	printf("Num Reduced Threads: %llu, Reduce Size: %llu\n", reduceThreadCount, reduceSize);
@@ -161,7 +166,7 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	uint64_t *partialSums;
 	int size = generateThreadCount * sizeof(uint64_t);
 	double totalSum = 0;
-	bool reduce = true;
+	bool reduce = false;
 
 	cudaMalloc((void**) &partialSums_d, size);
 	partialSums = (uint64_t *) malloc(size);
@@ -203,6 +208,7 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	approxPi = approxPi * 4.0f;
 
 	cudaFree(partialSums_d);
+	free(partialSums);
 
 	return approxPi;
 }
