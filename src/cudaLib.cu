@@ -55,15 +55,15 @@ int runGpuSaxpy(int vectorSize) {
 
 	cudaMemcpy(Z, Z_d, size, cudaMemcpyDeviceToHost);
 
+	// verify
+	printf("Error count: %i\n", verifyVector(X, Y, Z, scale, vectorSize));
+
 	cudaFree(X_d);
 	cudaFree(Y_d);
 	cudaFree(Z_d);
 	free(X);
 	free(Y);
 	free(Z);
-
-	// verify
-	printf("Error count: %i\n", verifyVector(X, Y, Z, scale, vectorSize));
 
 	return 0;
 }
